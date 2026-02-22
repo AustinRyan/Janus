@@ -16,6 +16,11 @@ dependencies = [
     "rich>=13.7.0",
     "anyio>=4.2.0",
     "structlog>=24.1.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "websockets>=14.0",
+    "httpx>=0.28.0",
+    "python-multipart>=0.0.18",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +33,18 @@ dev = [
     "ruff>=0.2.0",
     "hypothesis>=6.98.0",
     "time-machine>=2.13.0",
+    "httpx>=0.28.0",
+]
+integrations = [
+    "langchain-core>=0.3.0",
+    "crewai>=0.100.0",
+    "openai>=1.60.0",
+    "mcp>=1.0.0",
+]
+exporters = [
+    "opentelemetry-api>=1.29.0",
+    "opentelemetry-sdk>=1.29.0",
+    "prometheus-client>=0.21.0",
 ]
 
 [project.scripts]
