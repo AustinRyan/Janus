@@ -202,5 +202,19 @@ def demo(scenario: str, verbose: bool) -> None:
     asyncio.run(func(verbose=verbose))
 
 
+@main.command()
+@click.option("--host", default="0.0.0.0", help="Host to bind to")
+@click.option("--port", default=8000, help="Port to bind to")
+def serve(host: str, port: int) -> None:
+    """Launch the Sentinel web dashboard."""
+    from sentinel.web.app import run_server
+
+    console.print(
+        f"[bold green]Sentinel Dashboard[/bold green] starting at "
+        f"http://{host}:{port}"
+    )
+    run_server(host=host, port=port)
+
+
 if __name__ == "__main__":
     main()
