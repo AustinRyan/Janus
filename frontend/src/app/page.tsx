@@ -1,65 +1,139 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import ChatPanel from "@/components/ChatPanel";
+import SecurityDashboard from "@/components/SecurityDashboard";
+import PipelineDetail from "@/components/PipelineDetail";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+  toolCalls?: { tool_name: string; verdict: string; risk_score: number; risk_delta: number }[];
+}
+
+interface SecurityEvent {
+  event_type: string;
+  session_id: string;
+  data: Record<string, unknown>;
+  timestamp: string;
+}
 
 export default function Home() {
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [events, setEvents] = useState<SecurityEvent[]>([]);
+  const [riskScore, setRiskScore] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // Create session on mount
+  useEffect(() => {
+    const createSession = async () => {
+      try {
+        const resp = await fetch(`${API_BASE}/api/sessions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agent_id: "demo-agent", original_goal: "" }),
+        });
+        const data = await resp.json();
+        setSessionId(data.session_id);
+      } catch (err) {
+        console.error("Failed to create session:", err);
+      }
+    };
+    createSession();
+  }, []);
+
+  // Connect WebSocket when session is ready
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const wsUrl = API_BASE.replace("http", "ws");
+    const ws = new WebSocket(`${wsUrl}/api/ws/session/${sessionId}`);
+    wsRef.current = ws;
+
+    ws.onmessage = (event) => {
+      const secEvent: SecurityEvent = JSON.parse(event.data);
+      setEvents((prev) => [...prev, secEvent]);
+      if (secEvent.data.risk_score !== undefined) {
+        setRiskScore(secEvent.data.risk_score as number);
+      }
+    };
+
+    ws.onerror = (err) => console.error("WebSocket error:", err);
+
+    return () => {
+      ws.close();
+    };
+  }, [sessionId]);
+
+  const handleSendMessage = useCallback(
+    async (message: string) => {
+      if (!sessionId) return;
+
+      setMessages((prev) => [...prev, { role: "user", content: message }]);
+      setIsLoading(true);
+
+      try {
+        const resp = await fetch(`${API_BASE}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, message }),
+        });
+        const data = await resp.json();
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: data.message,
+            toolCalls: data.tool_calls,
+          },
+        ]);
+      } catch (err) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "Error: Failed to get response." },
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId]
+  );
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="h-screen flex flex-col">
+      {/* Header */}
+      <header className="flex items-center justify-between px-6 py-3 border-b border-[#2a2a3e] bg-[#0a0a0f]">
+        <div className="flex items-center gap-3">
+          <div className="w-2 h-2 rounded-full bg-[#00ff88] animate-pulse" />
+          <h1 className="text-lg font-bold text-[#e0e0e8]">Sentinel</h1>
+          <span className="text-xs text-[#555570]">Autonomous Security Layer</span>
+        </div>
+        <div className="flex items-center gap-4 text-xs text-[#8888a0]">
+          <span>Risk: <span style={{ color: riskScore >= 80 ? "#ff4444" : riskScore >= 40 ? "#ffaa00" : "#00ff88" }}>{riskScore.toFixed(1)}</span></span>
+          <span>Events: {events.length}</span>
+        </div>
+      </header>
+
+      {/* Three-panel layout */}
+      <div className="flex-1 grid grid-cols-[35%_35%_30%] overflow-hidden">
+        <ChatPanel
+          sessionId={sessionId}
+          onSendMessage={handleSendMessage}
+          messages={messages}
+          isLoading={isLoading}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+        <SecurityDashboard
+          sessionId={sessionId}
+          events={events}
+          riskScore={riskScore}
+        />
+        <PipelineDetail events={events} sessionId={sessionId} />
+      </div>
+    </main>
   );
 }
