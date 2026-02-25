@@ -4,8 +4,8 @@ import time
 
 import pytest
 
-from sentinel.circuit.breaker import CircuitBreaker, CircuitState
-from sentinel.config import CircuitBreakerConfig
+from janus.circuit.breaker import CircuitBreaker, CircuitState
+from janus.config import CircuitBreakerConfig
 
 
 @pytest.fixture

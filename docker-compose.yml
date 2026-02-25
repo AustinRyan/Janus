@@ -1,0 +1,30 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - SENTINEL_API_KEY=${SENTINEL_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - SENTINEL_DB_PATH=/data/sentinel.db
+    volumes:
+      - sentinel-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+      - NEXT_PUBLIC_SENTINEL_API_KEY=${SENTINEL_API_KEY:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  sentinel-data:

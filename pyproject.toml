@@ -3,10 +3,24 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "sentinel"
+name = "janus-security"
 version = "0.1.0"
-description = "Autonomous security layer for AI agents"
+description = "Autonomous security layer for AI agents. Every tool call passes through Janus."
+readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.11"
+authors = [{name = "Janus Security"}]
+keywords = ["ai", "security", "agents", "mcp", "llm", "guardian", "tool-use"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 
 dependencies = [
     "anthropic>=0.43.0",
@@ -22,6 +36,11 @@ dependencies = [
     "httpx>=0.28.0",
     "python-multipart>=0.0.18",
 ]
+
+[project.urls]
+Homepage = "https://janus-security.dev"
+Repository = "https://github.com/janus-security/janus"
+Documentation = "https://janus-security.dev/docs"
 
 [project.optional-dependencies]
 dev = [
@@ -46,9 +65,17 @@ exporters = [
     "opentelemetry-sdk>=1.29.0",
     "prometheus-client>=0.21.0",
 ]
+billing = [
+    "stripe>=8.0.0",
+    "resend>=2.0.0",
+]
 
 [project.scripts]
-sentinel = "sentinel.cli.app:main"
+janus = "janus.cli.app:main"
+janus-proxy = "janus.mcp.runner:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["janus"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from sentinel.sandbox.inspector import ResultInspector
-from sentinel.sandbox.mock_env import MockEnvironment, SimulationResult
-from sentinel.sandbox.policy import SandboxPolicy
+from janus.sandbox.inspector import ResultInspector
+from janus.sandbox.mock_env import MockEnvironment, SimulationResult
+from janus.sandbox.policy import SandboxPolicy
 from tests.conftest import make_request
 
 

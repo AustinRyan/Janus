@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Sentinel Security Dashboard",
+  title: "Janus Security Dashboard",
   description: "Autonomous Security Layer for AI Agents",
 };
 

@@ -5,15 +5,15 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import time_machine
 
-from sentinel.core.decision import ToolCallRequest
-from sentinel.identity.agent import AgentIdentity, AgentRole
-from sentinel.identity.registry import AgentRegistry
-from sentinel.itdr.anomaly import ServiceAccountAnomalyDetector
-from sentinel.itdr.collusion import CrossAgentCollusionDetector
-from sentinel.itdr.escalation import PrivilegeEscalationTracker
-from sentinel.itdr.signals import AnomalySignal, CollusionSignal, EscalationSignal
-from sentinel.storage.database import DatabaseManager
-from sentinel.storage.models import ToolUsageRow
+from janus.core.decision import ToolCallRequest
+from janus.identity.agent import AgentIdentity, AgentRole
+from janus.identity.registry import AgentRegistry
+from janus.itdr.anomaly import ServiceAccountAnomalyDetector
+from janus.itdr.collusion import CrossAgentCollusionDetector
+from janus.itdr.escalation import PrivilegeEscalationTracker
+from janus.itdr.signals import AnomalySignal, CollusionSignal, EscalationSignal
+from janus.storage.database import DatabaseManager
+from janus.storage.models import ToolUsageRow
 from tests.conftest import make_request
 
 

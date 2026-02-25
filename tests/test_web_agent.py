@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from sentinel.core.decision import SecurityVerdict, Verdict
-from sentinel.web.agent import ChatMessage, ChatResponse, ToolCallInfo
+from janus.core.decision import SecurityVerdict, Verdict
+from janus.web.agent import ChatMessage, ChatResponse, ToolCallInfo
 
 
 async def test_chat_response_structure() -> None:

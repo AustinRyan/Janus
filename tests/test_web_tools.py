@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from sentinel.web.tools import DEMO_TOOLS, MockToolExecutor
+from janus.web.tools import DEMO_TOOLS, MockToolExecutor
 
 
 async def test_all_tools_registered() -> None:

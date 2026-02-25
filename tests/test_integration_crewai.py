@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from sentinel.core.decision import SecurityVerdict, Verdict
-from sentinel.integrations.crewai import SentinelCrewTool
+from janus.core.decision import SecurityVerdict, Verdict
+from janus.integrations.crewai import JanusCrewTool
 
 
 async def test_crewai_tool_allows() -> None:
@@ -18,7 +18,7 @@ async def test_crewai_tool_allows() -> None:
     async def my_tool_fn(query: str) -> str:
         return f"Result for {query}"
 
-    tool = SentinelCrewTool(
+    tool = JanusCrewTool(
         name="search",
         description="Search the web",
         fn=my_tool_fn,
@@ -41,7 +41,7 @@ async def test_crewai_tool_blocks() -> None:
     async def my_tool_fn(query: str) -> str:
         return "should not run"
 
-    tool = SentinelCrewTool(
+    tool = JanusCrewTool(
         name="execute_code",
         description="Execute code",
         fn=my_tool_fn,

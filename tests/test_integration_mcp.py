@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from sentinel.core.decision import SecurityVerdict, Verdict
-from sentinel.integrations.mcp import SentinelMCPServer, MCPToolDefinition
+from janus.core.decision import SecurityVerdict, Verdict
+from janus.integrations.mcp import SentinelMCPServer, MCPToolDefinition
 
 
 async def test_mcp_server_registers_tools() -> None:

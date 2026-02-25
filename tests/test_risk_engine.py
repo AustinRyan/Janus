@@ -5,10 +5,10 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import time_machine
 
-from sentinel.risk.engine import RiskEngine
-from sentinel.risk.patterns import PatternDetector, PatternMatchResult
-from sentinel.risk.scoring import RiskScorer
-from sentinel.risk.thresholds import (
+from janus.risk.engine import RiskEngine
+from janus.risk.patterns import PatternDetector, PatternMatchResult
+from janus.risk.scoring import RiskScorer
+from janus.risk.thresholds import (
     DEFAULT_TOOL_BASE_RISK,
     KEYWORD_AMPLIFIER_CAP,
     LOCK_THRESHOLD,
@@ -19,7 +19,7 @@ from sentinel.risk.thresholds import (
     VELOCITY_PENALTY_PER_CALL,
     VELOCITY_THRESHOLD_CALLS,
 )
-from sentinel.storage.session_store import InMemorySessionStore, RiskEvent
+from janus.storage.session_store import InMemorySessionStore, RiskEvent
 
 
 # ── fixtures ────────────────────────────────────────────────────────
@@ -56,21 +56,27 @@ class TestBaseRisk:
 
 class TestKeywordScanning:
     def test_keyword_scanning_finds_matches(self, scorer: RiskScorer) -> None:
-        """Keywords embedded in tool_input values are detected and scored."""
-        tool_input = {"command": "read the password file"}
-        result = scorer._scan_keywords(tool_input)
+        """Dangerous patterns in sensitive tool inputs are detected and scored."""
+        tool_input = {"code": "os.system('rm -rf /')"}
+        result = scorer._scan_keywords("execute_code", tool_input)
         assert result > 0.0
+
+    def test_keyword_scanning_skips_benign_tools(self, scorer: RiskScorer) -> None:
+        """Benign tools are exempt from keyword scanning."""
+        tool_input = {"query": "os.system rm -rf /etc/shadow"}
+        assert scorer._scan_keywords("search_web", tool_input) == 0.0
+        assert scorer._scan_keywords("read_file", tool_input) == 0.0
+        assert scorer._scan_keywords("send_message", tool_input) == 0.0
 
     def test_keyword_scanning_cap(self, scorer: RiskScorer) -> None:
         """Multiple keyword matches do not exceed KEYWORD_AMPLIFIER_CAP."""
-        # Pack many high-weight keywords into a single input
         tool_input = {
-            "a": "password secret credentials",
-            "b": "api_key private_key ssh_key",
-            "c": "sudo rm -rf /etc/shadow /etc/passwd",
-            "d": "credit_card wallet token",
+            "a": "os.system eval( exec(",
+            "b": "rm -rf /etc/shadow /etc/passwd",
+            "c": "reverse_shell netcat -e exfil",
+            "d": "subprocess.call chmod 777 drop table truncate table",
         }
-        result = scorer._scan_keywords(tool_input)
+        result = scorer._scan_keywords("execute_code", tool_input)
         assert result == KEYWORD_AMPLIFIER_CAP
 
 

@@ -5,7 +5,7 @@ import asyncio
 
 import pytest
 
-from sentinel.web.events import EventBroadcaster, SecurityEvent
+from janus.web.events import EventBroadcaster, SecurityEvent
 
 
 async def test_subscribe_receives_events() -> None:

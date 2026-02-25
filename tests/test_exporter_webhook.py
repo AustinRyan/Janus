@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from sentinel.core.decision import SecurityVerdict, Verdict
-from sentinel.exporters.webhook import WebhookExporter
+from janus.core.decision import SecurityVerdict, Verdict
+from janus.exporters.webhook import WebhookExporter
 
 
 async def test_webhook_sends_verdict() -> None:
@@ -15,7 +15,7 @@ async def test_webhook_sends_verdict() -> None:
     mock_response = AsyncMock()
     mock_response.status_code = 200
 
-    with patch("sentinel.exporters.webhook.httpx.AsyncClient") as mock_client_cls:
+    with patch("janus.exporters.webhook.httpx.AsyncClient") as mock_client_cls:
         mock_client = AsyncMock()
         mock_client.post.return_value = mock_response
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)

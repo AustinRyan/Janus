@@ -5,11 +5,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from sentinel.core.decision import SecurityVerdict, Verdict
-from sentinel.integrations.langchain import SentinelToolWrapper, sentinel_guard
+from janus.core.decision import SecurityVerdict, Verdict
+from janus.integrations.langchain import JanusToolWrapper, janus_guard
 
 
-async def test_sentinel_tool_wrapper_allows() -> None:
+async def test_janus_tool_wrapper_allows() -> None:
     mock_guardian = AsyncMock()
     mock_guardian.wrap_tool_call.return_value = SecurityVerdict(
         verdict=Verdict.ALLOW, risk_score=5.0, risk_delta=5.0,
@@ -21,7 +21,7 @@ async def test_sentinel_tool_wrapper_allows() -> None:
     mock_tool.args_schema = None
     mock_tool.invoke = MagicMock(return_value="file contents")
 
-    wrapper = SentinelToolWrapper(
+    wrapper = JanusToolWrapper(
         tool=mock_tool,
         guardian=mock_guardian,
         agent_id="test-agent",
@@ -34,7 +34,7 @@ async def test_sentinel_tool_wrapper_allows() -> None:
     mock_guardian.wrap_tool_call.assert_called_once()
 
 
-async def test_sentinel_tool_wrapper_blocks() -> None:
+async def test_janus_tool_wrapper_blocks() -> None:
     mock_guardian = AsyncMock()
     mock_guardian.wrap_tool_call.return_value = SecurityVerdict(
         verdict=Verdict.BLOCK, risk_score=85.0, risk_delta=50.0,
@@ -46,7 +46,7 @@ async def test_sentinel_tool_wrapper_blocks() -> None:
     mock_tool.description = "Execute code"
     mock_tool.args_schema = None
 
-    wrapper = SentinelToolWrapper(
+    wrapper = JanusToolWrapper(
         tool=mock_tool,
         guardian=mock_guardian,
         agent_id="test-agent",
@@ -58,18 +58,18 @@ async def test_sentinel_tool_wrapper_blocks() -> None:
     mock_tool.invoke.assert_not_called()
 
 
-async def test_sentinel_guard_wraps_list() -> None:
+async def test_janus_guard_wraps_list() -> None:
     mock_guardian = AsyncMock()
     tools = [MagicMock(name=f"tool_{i}") for i in range(3)]
     for t in tools:
         t.description = "test"
         t.args_schema = None
 
-    wrapped = sentinel_guard(
+    wrapped = janus_guard(
         tools=tools,
         guardian=mock_guardian,
         agent_id="test-agent",
         session_id="test-session",
     )
     assert len(wrapped) == 3
-    assert all(isinstance(w, SentinelToolWrapper) for w in wrapped)
+    assert all(isinstance(w, JanusToolWrapper) for w in wrapped)

@@ -21,7 +21,7 @@ export default function PipelineDetail({ events, sessionId }: PipelineDetailProp
   const latestEvent = events.length > 0 ? events[events.length - 1] : null;
 
   return (
-    <div className="flex flex-col h-full bg-[#12121a]">
+    <div className="flex flex-col h-full min-h-0 bg-[#12121a]">
       <div className="px-4 py-3 border-b border-[#2a2a3e]">
         <h2 className="text-sm font-semibold text-[#8888a0] uppercase tracking-wider">
           Pipeline Detail

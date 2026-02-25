@@ -21,13 +21,32 @@ interface ChatPanelProps {
   onSendMessage: (message: string) => Promise<void>;
   messages: Message[];
   isLoading: boolean;
+  agentName?: string;
+  agentRole?: string;
+  agentPermissions?: string[];
+  tier?: "free" | "pro";
+  integration?: "sdk" | "mcp";
 }
+
+const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
+  research: { bg: "bg-blue-500/15", text: "text-blue-400" },
+  code: { bg: "bg-green-500/15", text: "text-green-400" },
+  financial: { bg: "bg-amber-500/15", text: "text-amber-400" },
+  communication: { bg: "bg-purple-500/15", text: "text-purple-400" },
+  admin: { bg: "bg-red-500/15", text: "text-red-400" },
+  data_analysis: { bg: "bg-cyan-500/15", text: "text-cyan-400" },
+};
 
 export default function ChatPanel({
   sessionId,
   onSendMessage,
   messages,
   isLoading,
+  agentName,
+  agentRole,
+  agentPermissions,
+  tier,
+  integration,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -55,13 +74,47 @@ export default function ChatPanel({
     }
   };
 
+  const roleStyle = agentRole ? ROLE_COLORS[agentRole] || { bg: "bg-gray-500/15", text: "text-gray-400" } : null;
+
   return (
-    <div className="flex flex-col h-full bg-[#12121a] border-r border-[#2a2a3e]">
+    <div className="flex flex-col h-full min-h-0 bg-[#12121a] border-r border-[#2a2a3e]">
       <div className="px-4 py-3 border-b border-[#2a2a3e]">
         <h2 className="text-sm font-semibold text-[#8888a0] uppercase tracking-wider">
           Agent Chat
         </h2>
-        {sessionId && (
+        {agentName && agentRole && roleStyle && (
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs text-[#e0e0e8] font-medium">{agentName}</span>
+            <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${roleStyle.bg} ${roleStyle.text}`}>
+              {agentRole}
+            </span>
+            {tier && (
+              <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                tier === "pro" ? "bg-violet-500/15 text-violet-400" : "bg-teal-500/15 text-teal-400"
+              }`}>
+                {tier}
+              </span>
+            )}
+            {integration && (
+              <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#1a1a2e] text-[#8888a0] border border-[#2a2a3e]">
+                {integration}
+              </span>
+            )}
+          </div>
+        )}
+        {agentPermissions && agentPermissions.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {agentPermissions.map((perm) => (
+              <span
+                key={perm}
+                className="text-[9px] font-mono px-1 py-0.5 rounded bg-[#1a1a2e] text-[#555570] border border-[#2a2a3e]"
+              >
+                {perm}
+              </span>
+            ))}
+          </div>
+        )}
+        {sessionId && !agentName && (
           <span className="text-xs text-[#555570]">{sessionId}</span>
         )}
       </div>

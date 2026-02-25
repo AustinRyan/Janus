@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from sentinel.core.decision import PipelineContext, Verdict
-from sentinel.drift.detector import SemanticDriftDetector
-from sentinel.llm.classifier import DriftResult
+from janus.core.decision import PipelineContext, Verdict
+from janus.drift.detector import SemanticDriftDetector
+from janus.llm.classifier import DriftResult
 from tests.conftest import make_request
 
 
@@ -86,7 +86,12 @@ async def test_moderate_drift_does_not_pause(
         original_goal_summary="Research topic",
         current_action_summary="Looking up related term",
     )
-    request = make_request(original_goal="Research AI safety")
+    # Must use an action tool — read-only tools are exempt from drift risk
+    request = make_request(
+        original_goal="Research AI safety",
+        tool_name="execute_code",
+        tool_input={"code": "print('analysis')"},
+    )
     context = PipelineContext()
 
     result = await detector.evaluate(request, context)
@@ -94,3 +99,28 @@ async def test_moderate_drift_does_not_pause(
     assert result.passed is True
     assert result.force_verdict is None
     assert result.risk_contribution == pytest.approx(18.0, abs=0.1)
+
+
+async def test_drift_on_readonly_tool_deferred(
+    detector: SemanticDriftDetector, mock_classifier: AsyncMock
+) -> None:
+    """Read-only tools should never get drift risk, even with high drift scores."""
+    mock_classifier.classify_drift.return_value = DriftResult(
+        drift_score=0.85,
+        explanation="Agent drifted from summarizing to web search",
+        original_goal_summary="Summarize report",
+        current_action_summary="Web search on unrelated topic",
+    )
+    request = make_request(
+        original_goal="Summarize the quarterly report",
+        tool_name="search_web",
+        tool_input={"query": "unrelated topic"},
+    )
+    context = PipelineContext()
+
+    result = await detector.evaluate(request, context)
+
+    assert result.passed is True
+    assert result.force_verdict is None
+    assert result.risk_contribution == 0.0
+    assert "read-only" in result.reason.lower()

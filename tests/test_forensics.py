@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from sentinel.core.decision import SecurityVerdict, Verdict
-from sentinel.forensics.explainer import TraceExplainer
-from sentinel.forensics.recorder import BlackBoxRecorder
-from sentinel.storage.database import DatabaseManager
+from janus.core.decision import SecurityVerdict, Verdict
+from janus.forensics.explainer import TraceExplainer
+from janus.forensics.recorder import BlackBoxRecorder
+from janus.storage.database import DatabaseManager
 from tests.conftest import make_request
 
 

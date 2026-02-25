@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from sentinel.core.decision import SecurityVerdict, Verdict
-from sentinel.exporters.prometheus import PrometheusExporter
+from janus.core.decision import SecurityVerdict, Verdict
+from janus.exporters.prometheus import PrometheusExporter
 
 
 async def test_prometheus_records_verdict() -> None:

@@ -6,8 +6,8 @@ from io import StringIO
 
 import pytest
 
-from sentinel.core.decision import SecurityVerdict, Verdict
-from sentinel.exporters.json_logger import JsonLogExporter
+from janus.core.decision import SecurityVerdict, Verdict
+from janus.exporters.json_logger import JsonLogExporter
 
 
 async def test_json_log_to_stream() -> None:

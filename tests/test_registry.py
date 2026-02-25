@@ -5,12 +5,12 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from sentinel.core.exceptions import AgentAlreadyExistsError, AgentNotFoundError
-from sentinel.identity.agent import AgentIdentity, AgentRole, ToolPermission
-from sentinel.identity.challenge import IdentityChallenger
-from sentinel.identity.credential import CredentialManager
-from sentinel.identity.registry import AgentRegistry
-from sentinel.storage.database import DatabaseManager
+from janus.core.exceptions import AgentAlreadyExistsError, AgentNotFoundError
+from janus.identity.agent import AgentIdentity, AgentRole, ToolPermission
+from janus.identity.challenge import IdentityChallenger
+from janus.identity.credential import CredentialManager
+from janus.identity.registry import AgentRegistry
+from janus.storage.database import DatabaseManager
 
 
 # ---------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -13,7 +14,26 @@ venv/
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+
+# Database
 *.db
 *.sqlite
 *.sqlite3
+
+# Secrets
 .env
+.env.local
+.env.production
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store

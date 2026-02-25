@@ -7,15 +7,18 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from sentinel.config import SentinelConfig
-from sentinel.core.decision import ToolCallRequest
-from sentinel.storage.database import DatabaseManager
-from sentinel.storage.session_store import InMemorySessionStore
+from janus.config import JanusConfig
+from janus.core.decision import ToolCallRequest
+from janus.storage.database import DatabaseManager
+from janus.storage.session_store import InMemorySessionStore
+
+# Long-lived HMAC-signed test key (expires ~2125)
+TEST_PRO_KEY = "sk-janus-eyJ0aWVyIjogInBybyIsICJjaWQiOiAidGVzdCIsICJleHAiOiA0OTI1NTY4NTk2fQ-c8a0672060a2ac17"
 
 
 @pytest.fixture
-def config() -> SentinelConfig:
-    return SentinelConfig()
+def config() -> JanusConfig:
+    return JanusConfig()
 
 
 @pytest.fixture

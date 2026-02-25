@@ -1,0 +1,42 @@
+# Sentinel MCP Proxy Configuration
+# Copy this to sentinel-proxy.toml and customize for your setup.
+
+server_name = "sentinel-proxy"
+log_level = "INFO"
+database_path = ":memory:"
+
+# Agent identity for the connecting MCP client
+[agent]
+agent_id = "claude-desktop"
+name = "Claude Desktop"
+role = "code"
+permissions = ["read_*", "write_*", "search_*", "execute_*"]
+original_goal = "Software development assistant"
+
+# Session management
+[session]
+session_id_prefix = "claude-desktop"
+
+# How this proxy is served (stdio for Claude Desktop, http for network)
+[transport]
+type = "stdio"
+# host = "127.0.0.1"  # only for http transport
+# port = 8100          # only for http transport
+
+# Upstream MCP servers to proxy
+# Each tool call is intercepted by Guardian before reaching these servers.
+
+[[upstream_servers]]
+name = "filesystem"
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "/Users/me/projects"]
+
+# [[upstream_servers]]
+# name = "github"
+# transport = "stdio"
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-github"]
+# namespace = "gh"
+# [upstream_servers.env]
+# GITHUB_TOKEN = "${GITHUB_TOKEN}"

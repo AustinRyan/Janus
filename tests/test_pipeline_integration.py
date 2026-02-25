@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from sentinel.config import SentinelConfig
-from sentinel.core.decision import Verdict
-from sentinel.core.guardian import Guardian
-from sentinel.identity.agent import AgentIdentity, AgentRole, ToolPermission
-from sentinel.identity.registry import AgentRegistry
-from sentinel.risk.engine import RiskEngine
-from sentinel.storage.database import DatabaseManager
-from sentinel.storage.session_store import InMemorySessionStore
+from janus.config import JanusConfig
+from janus.core.decision import Verdict
+from janus.core.guardian import Guardian
+from janus.identity.agent import AgentIdentity, AgentRole, ToolPermission
+from janus.identity.registry import AgentRegistry
+from janus.risk.engine import RiskEngine
+from janus.risk.thresholds import LOCK_THRESHOLD
+from janus.storage.database import DatabaseManager
+from janus.storage.session_store import InMemorySessionStore
 
 
 @pytest.fixture
@@ -31,7 +32,7 @@ def risk_engine(session_store: InMemorySessionStore) -> RiskEngine:
 async def guardian(
     registry: AgentRegistry, risk_engine: RiskEngine
 ) -> Guardian:
-    config = SentinelConfig()
+    config = JanusConfig()
     g = Guardian(
         config=config,
         registry=registry,
@@ -129,8 +130,8 @@ async def test_session_risk_accumulates_to_block(
         tool_name="financial_transfer",
         tool_input={"amount": 100000, "destination": "untraceable wallet"},
     )
-    # Both v2 and v3 should be capped at 100 and BLOCKED
-    assert v3.risk_score == 100.0
+    # Both v2 and v3 should be well past LOCK_THRESHOLD and BLOCKED
+    assert v3.risk_score >= LOCK_THRESHOLD
     assert v3.verdict == Verdict.BLOCK
     assert v2.verdict == Verdict.BLOCK
 

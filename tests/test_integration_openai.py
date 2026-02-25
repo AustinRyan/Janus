@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from sentinel.core.decision import SecurityVerdict, Verdict
-from sentinel.integrations.openai import SentinelFunctionProxy
+from janus.core.decision import SecurityVerdict, Verdict
+from janus.integrations.openai import JanusFunctionProxy
 
 
 async def test_openai_proxy_allows() -> None:
@@ -19,7 +19,7 @@ async def test_openai_proxy_allows() -> None:
     async def read_file(path: str) -> str:
         return f"Contents of {path}"
 
-    proxy = SentinelFunctionProxy(
+    proxy = JanusFunctionProxy(
         guardian=mock_guardian,
         agent_id="test-agent",
         session_id="test-session",
@@ -38,7 +38,7 @@ async def test_openai_proxy_blocks() -> None:
         recommended_action="Blocked",
     )
 
-    proxy = SentinelFunctionProxy(
+    proxy = JanusFunctionProxy(
         guardian=mock_guardian,
         agent_id="test-agent",
         session_id="test-session",
