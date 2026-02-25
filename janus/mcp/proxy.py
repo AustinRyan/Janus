@@ -54,6 +54,11 @@ class JanusMCPProxy:
         await self._db.apply_migrations()
 
         janus_config = JanusConfig(**self._config.janus)
+
+        # Apply custom thresholds from config to the global threshold singleton
+        from janus.risk import thresholds
+        thresholds.configure(janus_config.risk, janus_config.policy)
+
         registry = AgentRegistry(self._db)
         session_store = InMemorySessionStore()
         risk_engine = RiskEngine(session_store)

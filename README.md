@@ -1,34 +1,35 @@
-# Sentinel
+# Janus
 
-**Autonomous security layer for AI agents. Every tool call passes through Sentinel before it reaches the real tool.**
+**Autonomous security layer for AI agents. Every tool call passes through Janus before it reaches the real tool.**
 
-Sentinel sits between your AI agent and its tools, intercepting every action to enforce permissions, detect prompt injection, flag data exfiltration, and prevent privilege escalation — in real time.
+Janus sits between your AI agent and its tools, intercepting every action to enforce permissions, detect prompt injection, flag data exfiltration, and prevent privilege escalation — in real time.
 
 ```
 Your AI Agent
     |  calls tool
-Sentinel Guardian
+Janus Guardian
     |  ALLOW / BLOCK / CHALLENGE
 Real Tool (filesystem, API, database, etc.)
 ```
 
-## Why Sentinel
+## Why Janus
 
 AI agents are getting access to real tools — file systems, databases, APIs, email, code execution. One prompt injection or jailbreak and your agent is exfiltrating data, sending unauthorized emails, or running arbitrary code.
 
-Sentinel stops that. Without changing your agent code.
+Janus stops that. Without changing your agent code.
 
 ## Quick Start
 
 ```bash
-pip install sentinel-security
+pip install janus-security
 ```
 
 ### As a Python SDK
 
 ```python
-from sentinel import Guardian
+from janus import Guardian, JanusConfig
 
+config = JanusConfig.from_toml("janus.toml")
 guardian = await Guardian.from_config(config, registry, session_store)
 
 # Wrap every tool call
@@ -48,10 +49,10 @@ elif verdict.verdict == "block":
 
 ### As an MCP Proxy
 
-Drop Sentinel between Claude Desktop (or any MCP client) and your MCP tool servers:
+Drop Janus between Claude Desktop (or any MCP client) and your MCP tool servers:
 
 ```bash
-sentinel-proxy config.toml
+janus-proxy config.toml
 ```
 
 ```toml
@@ -71,8 +72,8 @@ Then in Claude Desktop config:
 ```json
 {
   "mcpServers": {
-    "sentinel": {
-      "command": "sentinel-proxy",
+    "janus": {
+      "command": "janus-proxy",
       "args": ["config.toml"]
     }
   }
@@ -81,9 +82,36 @@ Then in Claude Desktop config:
 
 Every tool call now goes through the Guardian security pipeline before reaching the real tool.
 
+### Configuration
+
+```bash
+janus init  # creates janus.toml
+```
+
+```toml
+# janus.toml
+[risk]
+lock_threshold = 80.0
+sandbox_threshold = 50.0
+
+[permissions.default]
+allow = ["read_*", "search_*"]
+deny = ["execute_*", "write_*"]
+
+[policy]
+llm_risk_weight = 0.4
+
+[policy.keyword_amplifiers]
+"custom_danger_tool" = 35.0
+
+[exporters.notifications.slack]
+webhook_url = "https://hooks.slack.com/services/..."
+min_verdict = "block"
+```
+
 ## Security Pipeline
 
-Sentinel runs a priority-ordered chain of security checks on every tool call:
+Janus runs a priority-ordered chain of security checks on every tool call:
 
 | Check | Priority | Tier | What it does |
 |-------|----------|------|-------------|
@@ -119,45 +147,47 @@ Every tool call gets one of five verdicts:
 - MCP proxy for Claude Desktop / Cursor / any MCP client
 - 6 built-in threat intelligence patterns
 - Cryptographic proof chain (tamper-evident audit trail)
+- Configurable policies via TOML
+- Audit log export (CSV, JSON, JSONL)
 - CLI tools
 
-### Pro (Sentinel Cloud)
+### Pro (Janus Cloud)
 
 Everything in Free, plus:
 
-- LLM-powered risk classification (we pay for the API calls)
+- LLM-powered risk classification
 - Semantic drift detection
 - Causal data-flow taint tracking
 - Predictive risk with lookahead
-- Crowd-sourced threat intelligence (patterns learned across all customers)
+- Multi-model support (Anthropic, OpenAI, Ollama)
+- Real-time notifications (Slack, email, Telegram)
 - Cloud dashboard with real-time monitoring
-- Multi-agent, multi-team management
 - Compliance reports and audit exports
-- Webhooks (Slack, PagerDuty)
 - SSO/SAML
 - SLA + priority support
 
-[Get started with Sentinel Pro](https://sentinel-security.dev/pricing)
+[Get started with Janus Pro](https://janus-security.dev/pricing)
 
 ## Architecture
 
 ```
-sentinel/
+janus/
   core/         # Guardian, security pipeline, verdicts
   identity/     # Agent roles, permissions, registry
-  risk/         # Risk scoring engine
+  risk/         # Risk scoring engine, configurable thresholds
   drift/        # Semantic drift detection (Pro)
   circuit/      # Circuit breaker pattern
   llm/          # LLM-based security checks (Pro)
   mcp/          # MCP proxy server
   web/          # FastAPI dashboard backend
-  storage/      # Session store, database
+  storage/      # Session store, SQLite persistence
+  forensics/    # Audit trail, trace export
   integrations/ # LangChain, OpenAI, CrewAI, MCP adapters
 ```
 
 ## Integrations
 
-Sentinel works with any agent framework:
+Janus works with any agent framework:
 
 - **MCP** - Drop-in proxy for Claude Desktop, Cursor, Cline
 - **LangChain** - Tool wrapper for LangChain agents
@@ -168,14 +198,14 @@ Sentinel works with any agent framework:
 ## Development
 
 ```bash
-git clone https://github.com/sentinel-security/sentinel.git
-cd sentinel
+git clone https://github.com/AustinRyan/project-sentinel.git
+cd project-sentinel
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev,integrations]"
 pytest tests/ -v
 ```
 
-234 tests. All passing.
+456 tests. All passing.
 
 ## License
 

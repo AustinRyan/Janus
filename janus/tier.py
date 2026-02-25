@@ -1,4 +1,4 @@
-"""Feature tier gating for Sentinel open core."""
+"""Feature tier gating for Janus open core."""
 from __future__ import annotations
 
 from enum import StrEnum
