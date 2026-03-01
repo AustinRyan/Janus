@@ -36,6 +36,10 @@ class EventBroadcaster:
     async def publish(self, event: SecurityEvent) -> None:
         for queue in self._subscribers.get(event.session_id, []):
             await queue.put(event)
+        # Fan out to global ("*") subscribers for the monitor dashboard
+        if event.session_id != "*":
+            for queue in self._subscribers.get("*", []):
+                await queue.put(event)
 
     async def subscribe(self, session_id: str) -> AsyncIterator[SecurityEvent]:
         queue: asyncio.Queue[SecurityEvent] = asyncio.Queue()

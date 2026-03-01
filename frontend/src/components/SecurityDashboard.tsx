@@ -167,7 +167,7 @@ export default function SecurityDashboard({
           <p className="text-xs text-[#555570] italic">No events yet. Start chatting to see security verdicts.</p>
         ) : (
           <div className="space-y-3">
-            {events.map((event, i) => {
+            {events.filter((e) => e.event_type === "verdict").map((event, i) => {
               const hasDetails = Boolean(
                 (event.data.reasons && event.data.reasons.length > 0) ||
                 (event.data.itdr_signals && event.data.itdr_signals.length > 0) ||

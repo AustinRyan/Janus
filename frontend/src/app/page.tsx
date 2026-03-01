@@ -592,7 +592,7 @@ export default function LandingPage() {
           </a>
 
           <div className="hidden items-center gap-7 md:flex">
-            {["Pipeline", "Docs", "Integration", "Pricing"].map((label) => (
+            {["Pipeline", "Integration", "Pricing"].map((label) => (
               <a
                 key={label}
                 href={`#${label.toLowerCase()}`}
@@ -601,6 +601,12 @@ export default function LandingPage() {
                 {label}
               </a>
             ))}
+            <a
+              href="/docs/quickstart"
+              className="text-[13px] text-[#636880] transition-colors hover:text-[#e4e7ef]"
+            >
+              Docs
+            </a>
           </div>
 
           <div className="hidden items-center gap-3 md:flex">
@@ -641,11 +647,14 @@ export default function LandingPage() {
         {mobileMenu && (
           <div className="border-t border-[#1e2233] bg-[#06080e] px-6 py-4 md:hidden">
             <div className="flex flex-col gap-4">
-              {["Pipeline", "Docs", "Integration", "Pricing"].map((l) => (
+              {["Pipeline", "Integration", "Pricing"].map((l) => (
                 <a key={l} href={`#${l.toLowerCase()}`} className="text-sm text-[#636880]" onClick={() => setMobileMenu(false)}>
                   {l}
                 </a>
               ))}
+              <a href="/docs/quickstart" className="text-sm text-[#636880]" onClick={() => setMobileMenu(false)}>
+                Docs
+              </a>
               <a href="#pricing" className="mt-2 rounded-lg bg-[#5eead4] px-4 py-2 text-center text-sm font-bold text-[#06080e]">
                 Get Started
               </a>
@@ -1536,10 +1545,15 @@ export default function LandingPage() {
                 Product
               </h4>
               <ul className="space-y-2">
-                {["Pipeline", "Docs", "Integration", "Pricing"].map((l) => (
-                  <li key={l}>
-                    <a href={`#${l.toLowerCase()}`} className="text-[12px] text-[#4a4e63] transition-colors hover:text-[#e4e7ef]">
-                      {l}
+                {[
+                  { label: "Pipeline", href: "#pipeline" },
+                  { label: "Integration", href: "#integration" },
+                  { label: "Pricing", href: "#pricing" },
+                  { label: "Docs", href: "/docs/quickstart" },
+                ].map((l) => (
+                  <li key={l.label}>
+                    <a href={l.href} className="text-[12px] text-[#4a4e63] transition-colors hover:text-[#e4e7ef]">
+                      {l.label}
                     </a>
                   </li>
                 ))}
@@ -1551,10 +1565,15 @@ export default function LandingPage() {
                 Resources
               </h4>
               <ul className="space-y-2">
-                {["GitHub", "API Reference", "Changelog", "Status"].map((l) => (
-                  <li key={l}>
-                    <a href="#" className="text-[12px] text-[#4a4e63] transition-colors hover:text-[#e4e7ef]">
-                      {l}
+                {[
+                  { label: "GitHub", href: "https://github.com/AustinRyan/project-sentinel" },
+                  { label: "API Reference", href: "/docs/api-reference" },
+                  { label: "Architecture", href: "/docs/architecture" },
+                  { label: "Configuration", href: "/docs/configuration" },
+                ].map((l) => (
+                  <li key={l.label}>
+                    <a href={l.href} className="text-[12px] text-[#4a4e63] transition-colors hover:text-[#e4e7ef]">
+                      {l.label}
                     </a>
                   </li>
                 ))}

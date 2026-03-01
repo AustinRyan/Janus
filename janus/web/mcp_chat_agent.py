@@ -11,7 +11,6 @@ from janus.core.guardian import Guardian
 from janus.mcp.proxy import JanusMCPProxy
 from janus.web.agent import ChatResponse, ToolCallInfo
 from janus.web.events import EventBroadcaster, SecurityEvent
-from janus.web.tools import MockToolExecutor
 
 logger = structlog.get_logger()
 
@@ -34,6 +33,7 @@ class McpChatAgent:
         session_id: str,
         original_goal: str = "",
         api_key: str | None = None,
+        tool_executor: Any | None = None,
     ) -> None:
         self._guardian = guardian
         self._proxy = proxy
@@ -41,7 +41,11 @@ class McpChatAgent:
         self._agent_id = agent_id
         self._session_id = session_id
         self._original_goal = original_goal
-        self._tool_executor = MockToolExecutor()
+        if tool_executor is not None:
+            self._tool_executor = tool_executor
+        else:
+            from janus.web.tools import MockToolExecutor
+            self._tool_executor = MockToolExecutor()
         self._client = anthropic.AsyncAnthropic(api_key=api_key)
         self._history: list[dict[str, Any]] = []
         self._model = "claude-haiku-4-5-20251001"

@@ -39,6 +39,7 @@ from janus.core.decision import (
 from janus.core.guardian import Guardian
 from janus.identity.agent import AgentIdentity, AgentRole, ToolPermission
 from janus.identity.registry import AgentRegistry
+from janus.integrations import Janus, GuardResult, create_janus
 
 __all__ = [
     "__version__",
@@ -46,7 +47,10 @@ __all__ = [
     "AgentRegistry",
     "AgentRole",
     "CheckResult",
+    "create_janus",
+    "GuardResult",
     "Guardian",
+    "Janus",
     "PipelineContext",
     "SecurityVerdict",
     "JanusConfig",

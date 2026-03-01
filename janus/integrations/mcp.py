@@ -19,8 +19,13 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+import structlog
+
+from janus.core.approval import ApprovalManager, needs_human_review
 from janus.core.decision import Verdict
 from janus.core.guardian import Guardian
+
+logger = structlog.get_logger()
 
 
 @dataclass
@@ -42,11 +47,13 @@ class JanusMCPServer:
         agent_id: str,
         session_id: str,
         original_goal: str = "",
+        approval_manager: ApprovalManager | None = None,
     ) -> None:
         self._guardian = guardian
         self._agent_id = agent_id
         self._session_id = session_id
         self._original_goal = original_goal
+        self._approval_manager = approval_manager
         self._tools: dict[str, MCPToolDefinition] = {}
 
     def add_tool(self, tool: MCPToolDefinition) -> None:
@@ -85,9 +92,43 @@ class JanusMCPServer:
                 return {"error": f"Unknown tool: {tool_name}"}
             return await tool.handler(**arguments)
 
+        # Check if this needs human review
+        approval_id: str | None = None
+        if self._approval_manager is not None:
+            cr_dicts = [
+                {
+                    "check_name": cr.check_name,
+                    "passed": cr.passed,
+                    "risk_contribution": cr.risk_contribution,
+                    "reason": cr.reason,
+                    "metadata": cr.metadata,
+                    "force_verdict": cr.force_verdict.value if cr.force_verdict else None,
+                }
+                for cr in verdict.check_results
+            ]
+            if needs_human_review(verdict.verdict.value, cr_dicts):
+                try:
+                    request = await self._approval_manager.create(
+                        session_id=self._session_id,
+                        agent_id=self._agent_id,
+                        tool_name=tool_name,
+                        tool_input=arguments,
+                        original_goal=self._original_goal,
+                        verdict=verdict.verdict.value,
+                        risk_score=verdict.risk_score,
+                        risk_delta=verdict.risk_delta,
+                        reasons=verdict.reasons,
+                        check_results=cr_dicts,
+                        trace_id=verdict.trace_id,
+                    )
+                    approval_id = request.id
+                except Exception:
+                    logger.exception("mcp_server_approval_create_error")
+
         return {
             "error": "blocked",
             "verdict": verdict.verdict.value,
             "risk_score": verdict.risk_score,
             "reason": verdict.recommended_action,
+            "approval_id": approval_id,
         }

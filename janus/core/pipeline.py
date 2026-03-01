@@ -193,6 +193,7 @@ class SecurityPipeline:
             drift_score=drift_score,
             itdr_signals=itdr_signals,
             recommended_action=recommended,
+            check_results=list(context.check_results),
         )
 
     def _recommend_action(self, verdict: Verdict, reasons: list[str]) -> str:

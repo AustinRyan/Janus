@@ -374,6 +374,27 @@ export default function Home() {
         </div>
       </header>
 
+      {/* Agent selector modal overlay */}
+      {showAgentSelector && activeSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-[#2a2a3e] bg-[#0a0a0f] shadow-2xl">
+            <button
+              onClick={() => setShowAgentSelector(false)}
+              className="absolute right-4 top-4 text-[#555570] hover:text-[#e0e0e8] transition-colors z-10"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+            <AgentSelector agents={agents} onSelectAgent={(agentId) => {
+              setShowAgentSelector(false);
+              handleSelectAgent(agentId);
+            }} />
+          </div>
+        </div>
+      )}
+
       {/* Main layout with sidebar */}
       <div className="flex-1 flex min-h-0">
         <SessionSidebar

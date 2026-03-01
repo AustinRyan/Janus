@@ -10,6 +10,7 @@ from janus.web.app import _setup, _teardown, create_app, state
 @pytest.fixture
 async def client(monkeypatch):
     monkeypatch.setenv("JANUS_DB_PATH", ":memory:")
+    monkeypatch.setenv("JANUS_DEV_MODE", "true")
     app = create_app()
     await _setup()
     try:
@@ -28,6 +29,8 @@ async def client(monkeypatch):
         state.exporter_coordinator = None
         state.chat_agents.clear()
         state.sessions.clear()
+        from janus.tier import current_tier
+        current_tier.reset()
 
 
 async def test_health_endpoint(client: AsyncClient) -> None:

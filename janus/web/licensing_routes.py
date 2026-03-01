@@ -5,12 +5,13 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from janus.licensing import generate_license, validate_license
 from janus.tier import current_tier
+from janus.web.auth import rate_limit_license, require_api_key
 
 logger = structlog.get_logger()
 
@@ -38,7 +39,7 @@ async def license_status() -> dict:
     }
 
 
-@router.post("/license/activate")
+@router.post("/license/activate", dependencies=[Depends(require_api_key), Depends(rate_limit_license)])
 async def license_activate(req: ActivateRequest) -> JSONResponse:
     valid, tier = validate_license(req.license_key)
     if not valid:
@@ -47,6 +48,13 @@ async def license_activate(req: ActivateRequest) -> JSONResponse:
             content={"detail": "Invalid or expired license key"},
         )
     current_tier.activate(req.license_key)
+
+    # Rebuild Guardian pipeline so PRO checks take effect immediately
+    from janus.web.app import state
+
+    if state.guardian is not None:
+        state.guardian.rebuild_pipeline()
+
     logger.info("license_activated_via_api", tier=tier)
     return JSONResponse(
         status_code=200,

@@ -514,9 +514,7 @@ export default function LandingPage() {
               </a>
             ))}
             <a
-              href="https://github.com/AustinRyan/project-sentinel"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/docs/quickstart"
               className="text-[13px] text-[#636880] transition-colors hover:text-[#e4e7ef]"
             >
               Docs
@@ -566,6 +564,9 @@ export default function LandingPage() {
                   {l}
                 </a>
               ))}
+              <a href="/docs/quickstart" className="text-sm text-[#636880]" onClick={() => setMobileMenu(false)}>
+                Docs
+              </a>
               <a href="#pricing" className="mt-2 rounded-lg bg-[#5eead4] px-4 py-2 text-center text-sm font-bold text-[#06080e]">
                 Get Started
               </a>
@@ -1162,10 +1163,15 @@ export default function LandingPage() {
                 Product
               </h4>
               <ul className="space-y-2">
-                {["Pipeline", "Integration", "Pricing", "Docs"].map((l) => (
-                  <li key={l}>
-                    <a href={`#${l.toLowerCase()}`} className="text-[12px] text-[#4a4e63] transition-colors hover:text-[#e4e7ef]">
-                      {l}
+                {[
+                  { label: "Pipeline", href: "#pipeline" },
+                  { label: "Integration", href: "#integration" },
+                  { label: "Pricing", href: "#pricing" },
+                  { label: "Docs", href: "/docs/quickstart" },
+                ].map((l) => (
+                  <li key={l.label}>
+                    <a href={l.href} className="text-[12px] text-[#4a4e63] transition-colors hover:text-[#e4e7ef]">
+                      {l.label}
                     </a>
                   </li>
                 ))}
@@ -1177,10 +1183,15 @@ export default function LandingPage() {
                 Resources
               </h4>
               <ul className="space-y-2">
-                {["GitHub", "API Reference", "Changelog", "Status"].map((l) => (
-                  <li key={l}>
-                    <a href="#" className="text-[12px] text-[#4a4e63] transition-colors hover:text-[#e4e7ef]">
-                      {l}
+                {[
+                  { label: "GitHub", href: "https://github.com/AustinRyan/project-sentinel" },
+                  { label: "API Reference", href: "/docs/api-reference" },
+                  { label: "Architecture", href: "/docs/architecture" },
+                  { label: "Configuration", href: "/docs/configuration" },
+                ].map((l) => (
+                  <li key={l.label}>
+                    <a href={l.href} className="text-[12px] text-[#4a4e63] transition-colors hover:text-[#e4e7ef]">
+                      {l.label}
                     </a>
                   </li>
                 ))}

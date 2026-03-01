@@ -250,6 +250,7 @@ class Guardian:
         self._registry = registry
         self._risk_engine = risk_engine
         self._drift_detector = drift_detector
+        self._classifier = classifier
         self._circuit_breaker = circuit_breaker or CircuitBreaker(config.circuit_breaker)
         self._sandbox = sandbox
         self._recorder = recorder
@@ -262,14 +263,24 @@ class Guardian:
             db=self._threat_intel_db
         )
         self._data_volume_tracker = data_volume_tracker or DataVolumeTracker()
+        self._itdr_check = _ITDRCheck(
+            anomaly_detector=anomaly_detector,
+            collusion_detector=collusion_detector,
+            escalation_tracker=escalation_tracker,
+            registry=registry,
+        )
 
         # Build pipeline checks — FREE tier gets rule-based, PRO gets LLM-powered
+        self._build_pipeline()
+
+    def _build_pipeline(self) -> None:
+        """Build pipeline checks based on current tier."""
         checks: list[SecurityCheck] = [
-            PromptInjectionCheck(classifier=classifier),
-            IdentityCheck(registry),
-            PermissionScopeCheck(registry),
+            PromptInjectionCheck(classifier=self._classifier),
+            IdentityCheck(self._registry),
+            PermissionScopeCheck(self._registry),
             DataVolumeCheck(self._data_volume_tracker),
-            _DeterministicRiskCheck(risk_engine),
+            _DeterministicRiskCheck(self._risk_engine),
         ]
 
         # PRO: taint tracking, predictive risk
@@ -279,25 +290,26 @@ class Guardian:
             checks.append(self._predictor)
 
         # PRO: LLM-powered classifier
-        if classifier and current_tier.check("llm_classifier"):
-            checks.append(_LLMRiskCheck(classifier))
+        if self._classifier and current_tier.check("llm_classifier"):
+            checks.append(_LLMRiskCheck(self._classifier))
 
         # PRO: semantic drift detection
-        if drift_detector and current_tier.check("drift_detection"):
-            checks.append(drift_detector)
+        if self._drift_detector and current_tier.check("drift_detection"):
+            checks.append(self._drift_detector)
 
         checks.append(self._threat_intel_check)
-
-        checks.append(
-            _ITDRCheck(
-                anomaly_detector=anomaly_detector,
-                collusion_detector=collusion_detector,
-                escalation_tracker=escalation_tracker,
-                registry=registry,
-            )
-        )
+        checks.append(self._itdr_check)
 
         self._pipeline = SecurityPipeline(checks)
+
+    def rebuild_pipeline(self) -> None:
+        """Rebuild the security pipeline after a tier change.
+
+        Call this after activating a license so PRO checks take effect
+        without restarting the server.
+        """
+        self._build_pipeline()
+        logger.info("guardian_pipeline_rebuilt", tier=current_tier.tier.value)
 
     @classmethod
     async def from_config(

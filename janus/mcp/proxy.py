@@ -11,6 +11,7 @@ from mcp.server.lowlevel import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 
 from janus.config import JanusConfig
+from janus.core.approval import ApprovalManager, needs_human_review
 from janus.core.decision import Verdict
 from janus.core.guardian import Guardian
 from janus.identity.agent import AgentIdentity, AgentRole, ToolPermission
@@ -20,6 +21,7 @@ from janus.mcp.config import ProxyConfig
 from janus.risk.engine import RiskEngine
 from janus.storage.database import DatabaseManager
 from janus.storage.session_store import InMemorySessionStore
+from janus.web.events import EventBroadcaster, SecurityEvent
 
 logger = structlog.get_logger()
 
@@ -33,6 +35,8 @@ class JanusMCPProxy:
         self._upstream = UpstreamManager()
         self._guardian: Guardian | None = None
         self._db: DatabaseManager | None = None
+        self._broadcaster = EventBroadcaster()
+        self._approval_manager: ApprovalManager | None = None
         self._session_id: str = ""
         self._register_handlers()
 
@@ -89,6 +93,12 @@ class JanusMCPProxy:
             drift_detector=drift_detector,
         )
 
+        self._approval_manager = ApprovalManager(
+            db=self._db,
+            broadcaster=self._broadcaster,
+            guardian=self._guardian,
+        )
+
         agent_cfg = self._config.agent
         agent_role = AgentRole(agent_cfg.role)
         permissions = [ToolPermission(tool_pattern=p) for p in agent_cfg.permissions]
@@ -131,6 +141,37 @@ class JanusMCPProxy:
             tool_input=arguments,
         )
 
+        # Broadcast verdict event for monitor dashboard
+        cr_dicts = [
+            {
+                "check_name": cr.check_name,
+                "passed": cr.passed,
+                "risk_contribution": cr.risk_contribution,
+                "reason": cr.reason,
+                "metadata": cr.metadata,
+                "force_verdict": cr.force_verdict.value if cr.force_verdict else None,
+            }
+            for cr in verdict.check_results
+        ]
+        await self._broadcaster.publish(SecurityEvent(
+            event_type="verdict",
+            session_id=self._session_id,
+            data={
+                "verdict": verdict.verdict.value,
+                "risk_score": verdict.risk_score,
+                "risk_delta": verdict.risk_delta,
+                "tool_name": tool_name,
+                "tool_input": arguments,
+                "reasons": verdict.reasons,
+                "drift_score": verdict.drift_score,
+                "itdr_signals": verdict.itdr_signals,
+                "recommended_action": verdict.recommended_action,
+                "trace_id": verdict.trace_id,
+                "check_results": cr_dicts,
+                "integration": "mcp",
+            },
+        ))
+
         logger.info(
             "tool_call_intercepted",
             tool=tool_name,
@@ -142,12 +183,45 @@ class JanusMCPProxy:
         if verdict.verdict == Verdict.ALLOW:
             try:
                 result = await self._upstream.call_tool(tool_name, arguments)
+                # Scan output for taint tracking
+                if hasattr(self._guardian, "taint_tracker"):
+                    self._guardian.taint_tracker.scan_output(
+                        self._session_id, tool_name, {"content": str(result.content)}, step=0
+                    )
                 return list(result.content)  # type: ignore[arg-type]
             except Exception as exc:
                 logger.error("upstream_call_failed", tool=tool_name, error=str(exc))
                 return [types.TextContent(type="text", text=f"Upstream error: {exc}")]
 
+        # Non-ALLOW verdict — check if this needs human review
+        approval_id: str | None = None
+        if self._approval_manager is not None and needs_human_review(verdict.verdict.value, cr_dicts):
+            try:
+                request = await self._approval_manager.create(
+                    session_id=self._session_id,
+                    agent_id=self._config.agent.agent_id,
+                    tool_name=tool_name,
+                    tool_input=arguments,
+                    original_goal=self._config.agent.original_goal,
+                    verdict=verdict.verdict.value,
+                    risk_score=verdict.risk_score,
+                    risk_delta=verdict.risk_delta,
+                    reasons=verdict.reasons,
+                    check_results=cr_dicts,
+                    trace_id=verdict.trace_id,
+                )
+                approval_id = request.id
+            except Exception:
+                logger.exception("mcp_approval_create_error")
+
         reasons = "; ".join(verdict.reasons) if verdict.reasons else "No details"
+        pending_note = ""
+        if approval_id:
+            pending_note = (
+                f" Approval ID: {approval_id}. "
+                "A human reviewer has been notified and will approve or reject this action."
+            )
+
         if verdict.verdict == Verdict.CHALLENGE:
             return [
                 types.TextContent(
@@ -155,7 +229,7 @@ class JanusMCPProxy:
                     text=(
                         f"[JANUS CHALLENGE] Tool '{tool_name}' requires verification. "
                         f"Risk: {verdict.risk_score:.1f}. Reasons: {reasons}. "
-                        f"Action: {verdict.recommended_action}"
+                        f"Action: {verdict.recommended_action}.{pending_note}"
                     ),
                 )
             ]
@@ -167,7 +241,7 @@ class JanusMCPProxy:
                     f"[JANUS BLOCKED] Tool '{tool_name}' was blocked by security policy. "
                     f"Verdict: {verdict.verdict.value}. Risk: {verdict.risk_score:.1f}. "
                     f"Reasons: {reasons}. "
-                    f"Action: {verdict.recommended_action}"
+                    f"Action: {verdict.recommended_action}.{pending_note}"
                 ),
             )
         ]
@@ -189,6 +263,14 @@ class JanusMCPProxy:
     @property
     def guardian(self) -> Guardian | None:
         return self._guardian
+
+    @property
+    def approval_manager(self) -> ApprovalManager | None:
+        return self._approval_manager
+
+    @property
+    def broadcaster(self) -> EventBroadcaster:
+        return self._broadcaster
 
     async def teardown(self) -> None:
         await self._upstream.close()

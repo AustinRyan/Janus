@@ -53,6 +53,7 @@ class SecurityVerdict:
     itdr_signals: list[str] = field(default_factory=list)
     trace_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     recommended_action: str = ""
+    check_results: list[CheckResult] = field(default_factory=list)
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 

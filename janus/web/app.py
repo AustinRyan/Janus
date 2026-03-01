@@ -11,7 +11,7 @@ import structlog
 from fastapi import APIRouter, Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from janus.web.auth import require_api_key
+from janus.web.auth import RateLimitMiddleware, require_api_key, require_pro_tier
 
 from janus.config import JanusConfig
 from janus.core.guardian import Guardian
@@ -21,7 +21,7 @@ from janus.forensics.explainer import TraceExplainer
 from janus.forensics.recorder import BlackBoxRecorder
 from janus.identity.agent import AgentIdentity, AgentRole, ToolPermission
 from janus.identity.registry import AgentRegistry
-from janus.licensing import generate_license
+from janus.licensing import generate_license, _reset_verification_key
 from janus.llm.classifier import SecurityClassifier
 from janus.llm.client import AnthropicClientWrapper
 from janus.risk.engine import RiskEngine
@@ -31,15 +31,25 @@ from janus.storage.session_store import InMemorySessionStore
 from janus.tier import current_tier
 from janus.web.agent import ChatAgent
 from janus.web.events import EventBroadcaster
+from janus.core.approval import ApprovalManager, needs_human_review
 from janus.web.schemas import (
     AgentOut,
+    ApprovalDecisionOut,
+    ApprovalDecisionRequest,
+    ApprovalRequestOut,
     ChatRequest,
     ChatResponseOut,
+    CheckResultOut,
+    HealthFullOut,
     HealthOut,
     MessageOut,
+    RiskEventOut,
     SessionCreateRequest,
     SessionOut,
+    TaintEntryOut,
     ToolCallOut,
+    ToolEvalRequest,
+    ToolEvalResponse,
     TraceOut,
 )
 
@@ -60,6 +70,9 @@ class AppState:
         self.sessions: dict[str, dict[str, str]] = {}
         self.recorder: BlackBoxRecorder | None = None
         self.exporter_coordinator: ExporterCoordinator | None = None
+        self.approval_manager: ApprovalManager | None = None
+        self.tool_registry: Any | None = None
+        self.tool_executor: Any | None = None
         self.api_key: str = ""
 
 
@@ -79,11 +92,17 @@ async def _setup() -> None:
     from janus.risk import thresholds
     thresholds.configure(config.risk, config.policy)
 
-    # Activate license BEFORE Guardian construction (tier checks frozen at init)
+    # Activate license BEFORE Guardian construction (tier checks at init)
     if config.license_key:
         current_tier.activate(config.license_key)
-    elif os.environ.get("ANTHROPIC_API_KEY"):
-        # Auto-activate PRO in development when an API key is available
+    elif os.environ.get("JANUS_DEV_MODE", "").lower() == "true":
+        # Auto-activate PRO in dev mode — ensure a signing key is available
+        if not os.environ.get("JANUS_LICENSE_SECRET"):
+            os.environ["JANUS_LICENSE_SECRET"] = "janus-dev-mode-key"
+            _reset_verification_key()
+        logger.warning(
+            "JANUS_DEV_MODE is active — PRO features enabled. Do NOT use in production."
+        )
         current_tier.activate(generate_license(tier="pro", customer_id="dashboard", expiry_days=36500))
 
     db_path = os.environ.get("JANUS_DB_PATH", config.database_path)
@@ -206,6 +225,23 @@ async def _setup() -> None:
         except Exception:
             pass  # Agent already exists from previous run
 
+    # Create tool registry and executor
+    from janus.tools.registry import ToolRegistry
+    from janus.tools.executor import ToolExecutor
+
+    tool_registry = ToolRegistry(db)
+    tool_executor = ToolExecutor(registry=tool_registry)
+    await tool_executor.refresh_definitions()
+
+    # Create approval manager for HITL workflow
+    approval_manager = ApprovalManager(
+        db=db,
+        broadcaster=state.broadcaster,
+        tool_executor=tool_executor,
+        guardian=guardian,
+        exporter_coordinator=exporter_coordinator,
+    )
+
     state.guardian = guardian
     state.registry = registry
     state.risk_engine = risk_engine
@@ -213,6 +249,9 @@ async def _setup() -> None:
     state.db = db
     state.recorder = recorder
     state.exporter_coordinator = exporter_coordinator
+    state.approval_manager = approval_manager
+    state.tool_registry = tool_registry
+    state.tool_executor = tool_executor
     state.api_key = api_key
 
     # Restore active sessions from DB so they survive restarts
@@ -220,8 +259,8 @@ async def _setup() -> None:
         for meta in await session_store.get_all_session_metadata():
             sid = str(meta["session_id"])
             state.sessions[sid] = {
-                "agent_id": str(meta["agent_id"]),
-                "original_goal": str(meta["original_goal"]),
+                "agent_id": str(meta["agent_id"] or ""),
+                "original_goal": str(meta["original_goal"] or ""),
             }
 
 
@@ -245,13 +284,21 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # CORS: read allowed origins from env var (comma-separated), default to localhost
+    cors_raw = os.environ.get("JANUS_CORS_ORIGINS", "")
+    allowed_origins = [o.strip() for o in cors_raw.split(",") if o.strip()]
+    if not allowed_origins:
+        allowed_origins = ["http://localhost:3000", "http://localhost:8000"]
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    app.add_middleware(RateLimitMiddleware)
 
     # Health endpoint — no auth required
     @app.get("/api/health", response_model=HealthOut)
@@ -320,6 +367,8 @@ def create_app() -> FastAPI:
             original_goal=req.original_goal,
             api_key=state.api_key,
             exporter_coordinator=state.exporter_coordinator,
+            approval_manager=state.approval_manager,
+            tool_executor=state.tool_executor,
         )
         return SessionOut(
             session_id=session_id,
@@ -335,8 +384,8 @@ def create_app() -> FastAPI:
             assert state.guardian is not None
             # Restore from session metadata if available
             meta = state.sessions.get(req.session_id, {})
-            agent_id = meta.get("agent_id", "demo-agent")
-            original_goal = meta.get("original_goal", req.message)
+            agent_id = meta.get("agent_id", "") or "demo-agent"
+            original_goal = meta.get("original_goal", "") or req.message
 
             agent = ChatAgent(
                 guardian=state.guardian,
@@ -346,6 +395,8 @@ def create_app() -> FastAPI:
                 original_goal=original_goal,
                 api_key=state.api_key,
                 exporter_coordinator=state.exporter_coordinator,
+                approval_manager=state.approval_manager,
+                tool_executor=state.tool_executor,
             )
             # Restore conversation history from DB
             if state.db is not None:
@@ -490,7 +541,7 @@ def create_app() -> FastAPI:
             "session_id": session_id,
         }
 
-    @api.get("/threat-intel")
+    @api.get("/threat-intel", dependencies=[Depends(require_pro_tier)])
     async def get_threat_intel() -> list[dict[str, Any]]:
         assert state.guardian is not None
         patterns = (
@@ -511,7 +562,7 @@ def create_app() -> FastAPI:
             for p in patterns
         ]
 
-    @api.get("/threat-intel/stats")
+    @api.get("/threat-intel/stats", dependencies=[Depends(require_pro_tier)])
     async def get_threat_intel_stats() -> dict[str, Any]:
         assert state.guardian is not None
         return (
@@ -547,7 +598,7 @@ def create_app() -> FastAPI:
             for t in traces
         ]
 
-    @api.get("/export/traces")
+    @api.get("/export/traces", dependencies=[Depends(require_pro_tier)])
     async def export_traces(
         format: str = "json",
         verdict: str | None = None,
@@ -593,7 +644,237 @@ def create_app() -> FastAPI:
             headers={"Content-Disposition": f"attachment; filename=traces.{ext}"},
         )
 
+    # ── Direct tool-call evaluation (no LLM needed) ──────────────────────
+
+    @api.post("/evaluate", response_model=ToolEvalResponse)
+    async def evaluate_tool_call(req: ToolEvalRequest) -> ToolEvalResponse:
+        """Evaluate a tool call through the full Guardian pipeline without LLM chat.
+
+        Use this to test security decisions directly.
+        """
+        assert state.guardian is not None
+        assert state.session_store is not None
+
+        # Ensure session exists
+        if req.session_id not in state.sessions:
+            state.sessions[req.session_id] = {
+                "agent_id": req.agent_id,
+                "original_goal": req.original_goal,
+            }
+            state.session_store.get_or_create_session(req.session_id)
+            if req.original_goal:
+                state.session_store.set_goal(req.session_id, req.original_goal)
+            if isinstance(state.session_store, PersistentSessionStore):
+                await state.session_store.set_agent_id(req.session_id, req.agent_id)
+
+        verdict = await state.guardian.wrap_tool_call(
+            agent_id=req.agent_id,
+            session_id=req.session_id,
+            original_goal=req.original_goal or state.sessions[req.session_id].get("original_goal", ""),
+            tool_name=req.tool_name,
+            tool_input=req.tool_input,
+        )
+
+        # Broadcast as real-time event so the dashboard sees it
+        from janus.web.events import SecurityEvent
+        await state.broadcaster.publish(SecurityEvent(
+            event_type="verdict",
+            session_id=req.session_id,
+            data={
+                "verdict": verdict.verdict.value,
+                "risk_score": verdict.risk_score,
+                "risk_delta": verdict.risk_delta,
+                "tool_name": req.tool_name,
+                "tool_input": req.tool_input,
+                "reasons": verdict.reasons,
+                "drift_score": getattr(verdict, "drift_score", None),
+                "itdr_signals": getattr(verdict, "itdr_signals", []),
+                "recommended_action": getattr(verdict, "recommended_action", ""),
+                "trace_id": getattr(verdict, "trace_id", ""),
+                "check_results": [
+                    {
+                        "check_name": cr.check_name,
+                        "passed": cr.passed,
+                        "risk_contribution": cr.risk_contribution,
+                        "reason": cr.reason,
+                        "metadata": cr.metadata,
+                        "force_verdict": cr.force_verdict.value if cr.force_verdict else None,
+                    }
+                    for cr in verdict.check_results
+                ],
+            },
+        ))
+
+        # Create approval request only for judgment-call blocks (not hard policy violations)
+        approval_id: str | None = None
+        check_results_dicts = [
+            {
+                "check_name": cr.check_name,
+                "passed": cr.passed,
+                "risk_contribution": cr.risk_contribution,
+                "reason": cr.reason,
+                "metadata": cr.metadata,
+                "force_verdict": cr.force_verdict.value if cr.force_verdict else None,
+            }
+            for cr in verdict.check_results
+        ]
+        if (
+            verdict.verdict.value != "allow"
+            and state.approval_manager is not None
+            and needs_human_review(verdict.verdict.value, check_results_dicts)
+        ):
+            approval = await state.approval_manager.create(
+                session_id=req.session_id,
+                agent_id=req.agent_id,
+                tool_name=req.tool_name,
+                tool_input=req.tool_input,
+                original_goal=req.original_goal or state.sessions[req.session_id].get("original_goal", ""),
+                verdict=verdict.verdict.value,
+                risk_score=verdict.risk_score,
+                risk_delta=verdict.risk_delta,
+                reasons=verdict.reasons,
+                check_results=check_results_dicts,
+                trace_id=getattr(verdict, "trace_id", ""),
+            )
+            approval_id = approval.id
+
+        return ToolEvalResponse(
+            verdict=verdict.verdict.value,
+            risk_score=verdict.risk_score,
+            risk_delta=verdict.risk_delta,
+            reasons=verdict.reasons,
+            session_id=req.session_id,
+            tool_name=req.tool_name,
+            approval_id=approval_id,
+        )
+
+    # ── Approval endpoints (HITL) ───────────────────────────────────────
+
+    @api.get("/approvals", response_model=list[ApprovalRequestOut])
+    async def list_approvals(
+        status: str | None = None,
+        session_id: str | None = None,
+        limit: int = 50,
+    ) -> list[ApprovalRequestOut]:
+        assert state.approval_manager is not None
+        requests = await state.approval_manager.get_all(
+            status=status, session_id=session_id, limit=limit
+        )
+        return [
+            ApprovalRequestOut(**r.to_dict())
+            for r in requests
+        ]
+
+    @api.get("/approvals/stats")
+    async def approval_stats() -> dict[str, int]:
+        assert state.approval_manager is not None
+        return await state.approval_manager.get_stats()
+
+    @api.get("/approvals/{approval_id}", response_model=ApprovalRequestOut)
+    async def get_approval(approval_id: str) -> ApprovalRequestOut:
+        assert state.approval_manager is not None
+        request = await state.approval_manager.get_by_id(approval_id)
+        if request is None:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Approval not found")
+        return ApprovalRequestOut(**request.to_dict())
+
+    @api.post("/approvals/{approval_id}/approve", response_model=ApprovalDecisionOut)
+    async def approve_request(
+        approval_id: str, body: ApprovalDecisionRequest,
+    ) -> ApprovalDecisionOut:
+        assert state.approval_manager is not None
+        result = await state.approval_manager.approve(
+            approval_id, decided_by=body.decided_by, reason=body.reason,
+        )
+        if result is None:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Approval not found or already resolved")
+        return ApprovalDecisionOut(
+            id=result.id,
+            status=result.status,
+            decided_by=result.decided_by,
+            decided_at=result.decided_at,
+            decision_reason=result.decision_reason,
+            tool_result=result.tool_result,
+        )
+
+    @api.post("/approvals/{approval_id}/reject", response_model=ApprovalDecisionOut)
+    async def reject_request(
+        approval_id: str, body: ApprovalDecisionRequest,
+    ) -> ApprovalDecisionOut:
+        assert state.approval_manager is not None
+        result = await state.approval_manager.reject(
+            approval_id, decided_by=body.decided_by, reason=body.reason,
+        )
+        if result is None:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Approval not found or already resolved")
+        return ApprovalDecisionOut(
+            id=result.id,
+            status=result.status,
+            decided_by=result.decided_by,
+            decided_at=result.decided_at,
+            decision_reason=result.decision_reason,
+        )
+
+    # ── Monitor endpoints ────────────────────────────────────────────────
+
+    @api.get("/sessions/{session_id}/events", response_model=list[RiskEventOut])
+    async def get_session_events(session_id: str) -> list[RiskEventOut]:
+        """Risk event history for a session (powers the risk timeline chart)."""
+        assert state.risk_engine is not None
+        events = state.risk_engine.session_store.get_events(session_id)
+        return [
+            RiskEventOut(
+                risk_delta=e.risk_delta,
+                new_score=e.new_score,
+                tool_name=e.tool_name,
+                reason=e.reason,
+                timestamp=e.timestamp.isoformat(),
+            )
+            for e in events
+        ]
+
+    @api.get("/sessions/{session_id}/taint", response_model=list[TaintEntryOut], dependencies=[Depends(require_pro_tier)])
+    async def get_session_taint(session_id: str) -> list[TaintEntryOut]:
+        """Active taint entries for a session."""
+        assert state.guardian is not None
+        entries = state.guardian.taint_tracker.get_active_taints(session_id)
+        return [
+            TaintEntryOut(
+                label=e.label.value,
+                source_tool=e.source_tool,
+                source_step=e.source_step,
+                patterns_matched=e.patterns_matched,
+                timestamp=e.timestamp.isoformat(),
+            )
+            for e in entries
+        ]
+
+    @api.get("/health/full", response_model=HealthFullOut)
+    async def health_full() -> HealthFullOut:
+        """Full health metrics including latency percentiles."""
+        assert state.guardian is not None
+        metrics = state.guardian.health.get_metrics()
+        return HealthFullOut(
+            status="ok",
+            total_requests=metrics.total_requests,
+            successful_requests=metrics.successful_requests,
+            failed_requests=metrics.failed_requests,
+            avg_latency_ms=metrics.avg_latency_ms,
+            p95_latency_ms=metrics.p95_latency_ms,
+            error_rate=metrics.error_rate,
+            circuit_breaker=state.guardian.circuit_breaker.state.value,
+            active_sessions=len(state.sessions),
+        )
+
     app.include_router(api)
+
+    # Tool management routes (auth-protected)
+    from janus.web.tool_routes import router as tool_router
+    tool_router.dependencies = [Depends(require_api_key)]
+    app.include_router(tool_router)
 
     # Licensing routes — separate from auth-protected router (Stripe signs its own requests)
     from janus.web.licensing_routes import router as licensing_router
@@ -607,6 +888,16 @@ def create_app() -> FastAPI:
         await websocket.accept()
         try:
             async for event in state.broadcaster.subscribe(session_id):
+                await websocket.send_json(event.to_dict())
+        except WebSocketDisconnect:
+            pass
+
+    @app.websocket("/api/ws/monitor")
+    async def websocket_monitor(websocket: WebSocket) -> None:
+        """Global WebSocket that receives ALL session events for the monitor dashboard."""
+        await websocket.accept()
+        try:
+            async for event in state.broadcaster.subscribe("*"):
                 await websocket.send_json(event.to_dict())
         except WebSocketDisconnect:
             pass

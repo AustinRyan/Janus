@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -7,13 +8,17 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+# Ensure test signing key is set before any janus imports that touch licensing
+os.environ.setdefault("JANUS_LICENSE_SECRET", "janus-test-key")
+
 from janus.config import JanusConfig
 from janus.core.decision import ToolCallRequest
+from janus.licensing import generate_license
 from janus.storage.database import DatabaseManager
 from janus.storage.session_store import InMemorySessionStore
 
-# Long-lived HMAC-signed test key (expires ~2125)
-TEST_PRO_KEY = "sk-janus-eyJ0aWVyIjogInBybyIsICJjaWQiOiAidGVzdCIsICJleHAiOiA0OTI1NTY4NTk2fQ-c8a0672060a2ac17"
+# Dynamically generated — uses the test signing key set above
+TEST_PRO_KEY = generate_license(tier="pro", customer_id="test", expiry_days=36500)
 
 
 @pytest.fixture

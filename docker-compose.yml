@@ -4,11 +4,19 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - SENTINEL_API_KEY=${SENTINEL_API_KEY:-}
+      - JANUS_API_KEY=${JANUS_API_KEY:-}
+      - JANUS_LICENSE_SECRET=${JANUS_LICENSE_SECRET:-}
+      - JANUS_DEV_MODE=${JANUS_DEV_MODE:-}
+      - JANUS_MOCK_TOOLS=${JANUS_MOCK_TOOLS:-}
+      - JANUS_CORS_ORIGINS=${JANUS_CORS_ORIGINS:-http://frontend:3000}
+      - JANUS_DB_PATH=/data/janus.db
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - SENTINEL_DB_PATH=/data/sentinel.db
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_PRICE_ID=${STRIPE_PRICE_ID:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
     volumes:
-      - sentinel-data:/data
+      - janus-data:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 10s
@@ -21,10 +29,10 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://backend:8000
-      - NEXT_PUBLIC_SENTINEL_API_KEY=${SENTINEL_API_KEY:-}
+      - NEXT_PUBLIC_JANUS_API_KEY=${JANUS_API_KEY:-}
     depends_on:
       backend:
         condition: service_healthy
 
 volumes:
-  sentinel-data:
+  janus-data:

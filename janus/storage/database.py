@@ -132,6 +132,51 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_sid ON chat_messages(session_id);
 
+CREATE TABLE IF NOT EXISTS approval_requests (
+    id                TEXT PRIMARY KEY,
+    session_id        TEXT NOT NULL,
+    agent_id          TEXT NOT NULL,
+    tool_name         TEXT NOT NULL,
+    tool_input_json   TEXT NOT NULL DEFAULT '{}',
+    original_goal     TEXT NOT NULL DEFAULT '',
+    verdict           TEXT NOT NULL,
+    risk_score        REAL NOT NULL DEFAULT 0.0,
+    risk_delta        REAL NOT NULL DEFAULT 0.0,
+    reasons_json      TEXT NOT NULL DEFAULT '[]',
+    check_results_json TEXT NOT NULL DEFAULT '[]',
+    trace_id          TEXT NOT NULL DEFAULT '',
+    status            TEXT NOT NULL DEFAULT 'pending',
+    decided_by        TEXT,
+    decided_at        TEXT,
+    decision_reason   TEXT NOT NULL DEFAULT '',
+    tool_result_json  TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at        TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_approval_status ON approval_requests(status);
+CREATE INDEX IF NOT EXISTS idx_approval_session ON approval_requests(session_id, status);
+
+CREATE TABLE IF NOT EXISTS registered_tools (
+    id                TEXT PRIMARY KEY,
+    name              TEXT UNIQUE NOT NULL,
+    description       TEXT DEFAULT '',
+    type              TEXT NOT NULL DEFAULT 'webhook',
+    endpoint          TEXT DEFAULT '',
+    method            TEXT DEFAULT 'POST',
+    auth_type         TEXT DEFAULT 'none',
+    auth_credential   TEXT DEFAULT '',
+    input_schema      TEXT DEFAULT '{}',
+    timeout_seconds   REAL DEFAULT 30.0,
+    mcp_server_name   TEXT DEFAULT '',
+    is_active         INTEGER DEFAULT 1,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_tools_name ON registered_tools(name);
+CREATE INDEX IF NOT EXISTS idx_tools_active ON registered_tools(is_active);
+
 CREATE TABLE IF NOT EXISTS schema_version (
     version           INTEGER PRIMARY KEY,
     applied_at        TEXT NOT NULL DEFAULT (datetime('now'))

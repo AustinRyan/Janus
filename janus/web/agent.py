@@ -8,10 +8,10 @@ from typing import Any
 import anthropic
 import structlog
 
+from janus.core.approval import needs_human_review
 from janus.core.decision import Verdict
 from janus.core.guardian import Guardian
 from janus.web.events import EventBroadcaster, SecurityEvent
-from janus.web.tools import MockToolExecutor
 
 logger = structlog.get_logger()
 
@@ -58,17 +58,24 @@ class ChatAgent:
         original_goal: str = "",
         api_key: str | None = None,
         exporter_coordinator: Any | None = None,
+        approval_manager: Any | None = None,
+        tool_executor: Any | None = None,
     ) -> None:
         self._guardian = guardian
         self._broadcaster = broadcaster
         self._agent_id = agent_id
         self._session_id = session_id
         self._original_goal = original_goal
-        self._tool_executor = MockToolExecutor()
+        if tool_executor is not None:
+            self._tool_executor = tool_executor
+        else:
+            from janus.web.tools import MockToolExecutor
+            self._tool_executor = MockToolExecutor()
         self._client = anthropic.AsyncAnthropic(api_key=api_key)
         self._history: list[dict[str, Any]] = []
         self._model = "claude-haiku-4-5-20251001"
         self._exporter_coordinator = exporter_coordinator
+        self._approval_manager = approval_manager
 
     def set_history(self, history: list[dict[str, Any]]) -> None:
         """Restore conversation history (e.g. from DB after restart)."""
@@ -172,6 +179,17 @@ class ChatAgent:
                             "itdr_signals": verdict.itdr_signals,
                             "recommended_action": verdict.recommended_action,
                             "trace_id": verdict.trace_id,
+                            "check_results": [
+                                {
+                                    "check_name": cr.check_name,
+                                    "passed": cr.passed,
+                                    "risk_contribution": cr.risk_contribution,
+                                    "reason": cr.reason,
+                                    "metadata": cr.metadata,
+                                    "force_verdict": cr.force_verdict.value if cr.force_verdict else None,
+                                }
+                                for cr in verdict.check_results
+                            ],
                         },
                     ))
 
@@ -252,6 +270,37 @@ class ChatAgent:
                             "content": denial_msg,
                             "is_error": True,
                         })
+
+                        # Create approval request for HITL review (only for judgment calls)
+                        if self._approval_manager is not None:
+                            cr_dicts = [
+                                {
+                                    "check_name": cr.check_name,
+                                    "passed": cr.passed,
+                                    "risk_contribution": cr.risk_contribution,
+                                    "reason": cr.reason,
+                                    "metadata": cr.metadata,
+                                    "force_verdict": cr.force_verdict.value if cr.force_verdict else None,
+                                }
+                                for cr in verdict.check_results
+                            ]
+                            if needs_human_review(verdict.verdict.value, cr_dicts):
+                                try:
+                                    await self._approval_manager.create(
+                                        session_id=self._session_id,
+                                        agent_id=self._agent_id,
+                                        tool_name=block_name,
+                                        tool_input=block_input,
+                                        original_goal=self._original_goal,
+                                        verdict=verdict.verdict.value,
+                                        risk_score=verdict.risk_score,
+                                        risk_delta=verdict.risk_delta,
+                                        reasons=verdict.reasons,
+                                        check_results=cr_dicts,
+                                        trace_id=verdict.trace_id,
+                                    )
+                                except Exception:
+                                    logger.exception("approval_create_error")
 
                     tool_calls.append(tool_call_info)
 
